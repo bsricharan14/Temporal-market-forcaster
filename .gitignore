@@ -1,0 +1,49 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.eggs/
+*.egg-info/
+
+# Python virtual environments
+.venv/
+venv/
+backend/.venv/
+backend/venv/
+
+# Local database files
+*.db
+*.sqlite3
+
+# Frontend dependencies and build outputs
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
