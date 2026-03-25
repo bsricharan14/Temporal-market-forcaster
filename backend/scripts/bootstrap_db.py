@@ -1,19 +1,24 @@
 import argparse
-import os
 from pathlib import Path
 
 import psycopg
+from dotenv import load_dotenv
+
+from app.core.config import settings
 
 
 DEFAULT_SCHEMA = Path(__file__).resolve().parents[1] / "sql" / "001_timescale_schema.sql"
 DEFAULT_CSV = Path(__file__).resolve().parents[2] / "synthetic_ticks.csv"
+ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+load_dotenv(dotenv_path=ENV_FILE)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Initialize TimescaleDB schema and optional sample data")
     parser.add_argument(
         "--database-url",
-        default=os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/market_db"),
+        default=settings.get_database_url(),
         help="PostgreSQL connection URL",
     )
     parser.add_argument(

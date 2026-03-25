@@ -36,6 +36,8 @@ This backend now includes a temporal schema tuned for high-frequency market tick
 
 ## Quick start
 
+Before starting, set your local DB credentials in `backend/.env`.
+
 ### Option A: Docker (recommended)
 
 From project root:
@@ -46,7 +48,8 @@ docker compose up -d
 
 ### Option B: Existing PostgreSQL/TimescaleDB instance
 
-Use your own instance and set `DATABASE_URL` in `backend/.env`.
+Use your own instance and set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` in `backend/.env`.
+If needed, set `DATABASE_URL` to override all `DB_*` fields.
 
 ## Initialize schema
 

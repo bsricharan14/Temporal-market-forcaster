@@ -8,7 +8,7 @@ async def get_pool():
     global _pool
     if _pool is None:
         _pool = AsyncConnectionPool(
-            conninfo=settings.DATABASE_URL,
+            conninfo=settings.get_database_url(),
             min_size=1,
             max_size=10,
             open=False,
