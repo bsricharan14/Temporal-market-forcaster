@@ -6,7 +6,7 @@ class Tick(BaseModel):
     time: datetime
     symbol: str
     price: float
-    volume: float
+    volume: int
 
 
 class OHLCV(BaseModel):
@@ -16,4 +16,4 @@ class OHLCV(BaseModel):
     high: float
     low: float
     close: float
-    volume: float
+    volume: int

@@ -1,0 +1,20 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.14.2-pg16
+    container_name: tmf-timescaledb
+    environment:
+      POSTGRES_DB: market_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d market_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  timescale_data:
