@@ -72,13 +72,13 @@ docker compose --env-file ./backend/.env logs -f db
 Open psql inside container:
 
 ```bash
-docker compose --env-file ./backend/.env exec db psql -U user -d market_db
+docker compose --env-file ./backend/.env exec db bash -c 'PGPASSWORD=$POSTGRES_PASSWORD exec psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB'
 ```
 
 Verify extensions:
 
 ```bash
-docker compose --env-file ./backend/.env exec db psql -U user -d market_db -c "\dx"
+docker compose --env-file ./backend/.env exec --user postgres db psql -d postgres -c "\dx"
 ```
 
 Stop containers:
