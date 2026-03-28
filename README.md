@@ -78,7 +78,7 @@ docker compose --env-file ./backend/.env exec db bash -c 'PGPASSWORD=$POSTGRES_P
 Verify extensions:
 
 ```bash
-docker compose --env-file ./backend/.env exec --user postgres db psql -d postgres -c "\dx"
+docker compose --env-file ./backend/.env exec db bash -c 'PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -c "\\dx"'
 ```
 
 Stop containers:
