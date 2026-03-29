@@ -1,19 +1,37 @@
 services:
-  timescaledb:
-    build: .
-    container_name: tmf-timescaledb
-    # THE MAGIC FIX: Keeps the container alive forever without running the dashboard
-    command: tail -f /dev/null 
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tmf-db
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: >
+      bash -c '
+      while ! su - postgres -c "pg_isready"; do sleep 1; done;
+      su - postgres -c "psql -c \"CREATE USER \\\"$$POSTGRES_USER\\\" WITH SUPERUSER PASSWORD '\''$$POSTGRES_PASSWORD'\'';\"" || true;
+      su - postgres -c "psql -c \"ALTER USER \\\"$$POSTGRES_USER\\\" WITH PASSWORD '\''$$POSTGRES_PASSWORD'\'';\"" || true;
+      su - postgres -c "psql -c \"CREATE DATABASE \\\"$$POSTGRES_DB\\\" OWNER \\\"$$POSTGRES_USER\\\";\"" || true;
+      su - postgres -c "psql -d \"$$POSTGRES_DB\" -c \"CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;\"" || true;
+      su - postgres -c "psql -d \"$$POSTGRES_DB\" -c \"CREATE EXTENSION IF NOT EXISTS pgml CASCADE;\"" || true;
+      tail -f /dev/null
+      '
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
-      - timescale_data:/var/lib/postgresql/data
+      - tmf_pg_data:/var/lib/postgresql/data
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
-# THIS IS THE MISSING PIECE:
 volumes:
-  timescale_data:
+  tmf_pg_data:

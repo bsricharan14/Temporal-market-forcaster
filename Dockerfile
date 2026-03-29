@@ -1,4 +1,3 @@
-# Start with the official PostgresML image 
 FROM ghcr.io/postgresml/postgresml:2.9.3
 
 # Switch to root to install new packages
@@ -13,7 +12,9 @@ RUN apt-get update && apt-get install -y lsb-release curl gnupg \
     && curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/keyrings/timescaledb.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list \
     && apt-get update \
-    && apt-get install -y timescaledb-2-postgresql-15
-
+    && apt-get install -y --no-install-recommends timescaledb-2-postgresql-15 \
+    && apt-get purge -y --auto-remove curl gnupg lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+    
 # Ensure both extensions are preloaded when the database boots up
 RUN echo "shared_preload_libraries = 'timescaledb, pgml'" >> /etc/postgresql/15/main/postgresql.conf
