@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Panel from "../ui/Panel";
 import MetricCard from "../ui/MetricCard";
+import BenchmarkMatrix from "./BenchmarkMatrix";
 
 const WINDOW_OPTIONS = [15, 60, 240, 1440];
 const RUN_OPTIONS = [1, 3, 5];
@@ -26,16 +27,18 @@ export default function BenchmarkPage({ selectedAsset, simulationControls }) {
     setError("");
     try {
       const response = await fetch(
-        `/api/market/benchmark?symbol=${encodeURIComponent(selectedAsset.symbol)}&window_minutes=${windowMinutes}&runs=${runs}`,
+        `/api/market/benchmark?symbol=${encodeURIComponent(selectedAsset.symbol)}&window=${encodeURIComponent(`${windowMinutes} minutes`)}&runs=${runs}`,
       );
       if (!response.ok) {
-        throw new Error("Failed to execute benchmark");
+        const body = await response.text();
+        throw new Error(body || "Failed to execute benchmark");
       }
 
       const payload = await response.json();
       setBenchmark(payload);
       setLastRunAt(new Date());
     } catch (fetchError) {
+      console.error("Benchmark fetch error:", fetchError);
       setError(fetchError.message || "Unable to run benchmark");
     } finally {
       setLoading(false);
@@ -140,7 +143,7 @@ export default function BenchmarkPage({ selectedAsset, simulationControls }) {
             </select>
           </label>
           <button className="sim-btn" disabled={loading} onClick={runBenchmark}>
-            {loading ? "Running..." : "Run Benchmark"}
+            {loading ? "Running benchmark..." : "Run Benchmark"}
           </button>
         </div>
 
@@ -175,37 +178,7 @@ export default function BenchmarkPage({ selectedAsset, simulationControls }) {
       </section>
 
       <Panel title="Benchmark Matrix" subtitle="Median latency comparison: plain table vs Timescale options">
-        <div className="benchmark-matrix-wrap">
-          <table className="benchmark-matrix" role="table" aria-label="Timescale benchmark matrix">
-            <thead>
-              <tr>
-                <th>Query</th>
-                <th>Plain</th>
-                <th>Hypertable</th>
-                <th>Hyper Speedup</th>
-                <th>Cagg</th>
-                <th>Cagg Speedup</th>
-                <th>Rows</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.label}</td>
-                  <td className="negative">{formatMs(row.plain?.median_ms)}</td>
-                  <td className="positive">{formatMs(row.hypertable?.median_ms)}</td>
-                  <td>{row.speedup?.hypertable_vs_plain ? `${row.speedup.hypertable_vs_plain}x` : "--"}</td>
-                  <td>{row.continuous_aggregate ? formatMs(row.continuous_aggregate?.median_ms) : "N/A"}</td>
-                  <td>{row.speedup?.cagg_vs_plain ? `${row.speedup.cagg_vs_plain}x` : "N/A"}</td>
-                  <td>
-                    {row.plain?.rows ?? "--"}
-                    <span className="benchmark-rows-meta"> / {row.hypertable?.rows ?? "--"}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <BenchmarkMatrix cases={rows} loading={loading} />
       </Panel>
 
       <Panel title="Method" subtitle="How this benchmark is executed for demonstration">

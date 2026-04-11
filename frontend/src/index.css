@@ -327,7 +327,7 @@ body {
 	background: linear-gradient(145deg, #142038, #101925);
 }
 
-.chart-hero > div:first-child {
+.chart-hero>div:first-child {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -517,6 +517,76 @@ body {
 	display: grid;
 	gap: 6px;
 	justify-items: end;
+}
+
+.benchmark-matrix-panel {
+	display: grid;
+	gap: 14px;
+}
+
+.benchmark-loading {
+	padding: 14px 16px;
+	border-radius: 14px;
+	background: rgba(20, 31, 53, 0.9);
+	border: 1px solid rgba(138, 181, 255, 0.14);
+	color: var(--text-main);
+	font-size: 0.95rem;
+}
+
+.benchmark-table-wrapper {
+	overflow-x: auto;
+}
+
+.benchmark-table {
+	width: 100%;
+	border-collapse: collapse;
+	min-width: 760px;
+}
+
+.benchmark-table th,
+.benchmark-table td {
+	padding: 16px 14px;
+	text-align: left;
+	border-bottom: 1px solid var(--line);
+	font-size: 0.88rem;
+}
+
+.benchmark-table th {
+	color: var(--text-muted);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+}
+
+.benchmark-table tbody tr:hover {
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.speedup-pill {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 66px;
+	padding: 6px 10px;
+	border-radius: 999px;
+	font-family: "JetBrains Mono", "Consolas", monospace;
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.speedup-positive {
+	background: rgba(53, 211, 157, 0.12);
+	color: var(--positive);
+}
+
+.speedup-negative {
+	background: rgba(255, 107, 107, 0.12);
+	color: var(--negative);
+}
+
+.speedup-neutral {
+	background: rgba(138, 181, 255, 0.12);
+	color: var(--text-muted);
 }
 
 .model-status {
@@ -1051,7 +1121,7 @@ body {
 		padding: 12px 14px;
 	}
 
-	.chart-hero > div:first-child {
+	.chart-hero>div:first-child {
 		gap: 4px;
 	}
 

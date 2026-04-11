@@ -1,12 +1,16 @@
-from time import perf_counter
+import json
+import logging
 from pathlib import Path
 from statistics import median
+from typing import Any
 
 from fastapi import APIRouter, Query
 
 from app.db.connection import get_connection_pool
 from app.services.simulation import simulation_manager
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 router = APIRouter(prefix="/market", tags=["market"])
 TICK_DATA_DIR = Path(__file__).resolve().parents[4] / "tick data"
 
@@ -151,136 +155,197 @@ async def get_ohlcv(symbol: str = "AAPL", limit: int = Query(default=120, ge=1, 
 @router.get("/benchmark")
 async def benchmark(
     symbol: str = "AAPL",
-    window_minutes: int = Query(default=60, ge=1, le=1440),
+    window: str | None = Query(default=None, min_length=1),
+    window_minutes: int | None = Query(default=None, ge=1, le=1440),
     runs: int = Query(default=3, ge=1, le=10),
 ):
     pool = await get_connection_pool()
+    interval = window if window is not None else f"{window_minutes or 60} minutes"
+    logger.info("Benchmark request: symbol=%s interval=%s runs=%s", symbol, interval, runs)
 
-    async def timed_query(cur, sql: str, params: tuple):
-        run_latencies: list[float] = []
+    def _normalize_explain_payload(payload: Any) -> Any:
+        if isinstance(payload, (list, tuple)) and payload:
+            return _normalize_explain_payload(payload[0])
+        if isinstance(payload, str):
+            return json.loads(payload)
+        return payload
+
+    def _find_value(payload: Any, key: str) -> Any:
+        if isinstance(payload, dict):
+            if key in payload:
+                return payload[key]
+            for value in payload.values():
+                found = _find_value(value, key)
+                if found is not None:
+                    return found
+        elif isinstance(payload, list):
+            for item in payload:
+                found = _find_value(item, key)
+                if found is not None:
+                    return found
+        return None
+
+    async def explain_query(cur, sql: str, params: tuple):
+        explain_sql = f"EXPLAIN (ANALYZE, FORMAT JSON) {sql.strip()}"
+        logger.debug("Benchmark query explain: %s | params=%s", explain_sql, params)
+        await cur.execute(explain_sql, params)
+        rows = await cur.fetchall()
+        payload = _normalize_explain_payload(rows[0] if rows else None)
+        execution_time = _find_value(payload, "Execution Time")
+        actual_rows = _find_value(payload, "Actual Rows")
+
+        if execution_time is None:
+            logger.error("Failed to parse execution time from EXPLAIN payload: %s", payload)
+            raise RuntimeError("Unable to parse execution time from EXPLAIN output")
+
+        logger.info("Query executed in %.3f ms, rows=%s", execution_time, actual_rows)
+        return float(execution_time), int(actual_rows or 0)
+
+    async def fetch_reference_time(cur, symbol: str):
+        await cur.execute(
+            """
+            SELECT GREATEST(
+                COALESCE((SELECT MAX(time) FROM market_ticks WHERE symbol = %s), 'epoch'),
+                COALESCE((SELECT MAX(time) FROM market_ticks_plain WHERE symbol = %s), 'epoch')
+            )
+            """,
+            (symbol, symbol),
+        )
+        result = await cur.fetchone()
+        latest_time = result[0] if result else None
+
+        if latest_time is not None:
+            return latest_time
+
+        await cur.execute("SELECT NOW()")
+        result = await cur.fetchone()
+        return result[0] if result else None
+
+    async def query_stats(cur, sql: str, params: tuple):
+        latencies: list[float] = []
         row_count = 0
 
-        for _ in range(runs):
-            start = perf_counter()
-            await cur.execute(sql, params)
-            rows = await cur.fetchall()
-            elapsed_ms = (perf_counter() - start) * 1000
-            run_latencies.append(elapsed_ms)
-            row_count = len(rows)
-
-        avg_ms = sum(run_latencies) / len(run_latencies)
-        median_ms = median(run_latencies)
-        min_ms = min(run_latencies)
-        max_ms = max(run_latencies)
+        for attempt in range(1, runs + 1):
+            elapsed_ms, actual_rows = await explain_query(cur, sql, params)
+            logger.info("Benchmark run %d/%d: %.3f ms", attempt, runs, elapsed_ms)
+            latencies.append(round(elapsed_ms, 3))
+            row_count = actual_rows or row_count
 
         return {
             "rows": row_count,
-            "avg_ms": round(avg_ms, 3),
-            "median_ms": round(median_ms, 3),
-            "min_ms": round(min_ms, 3),
-            "max_ms": round(max_ms, 3),
-            "runs": [round(value, 3) for value in run_latencies],
+            "avg_ms": round(sum(latencies) / len(latencies), 3),
+            "median_ms": round(median(latencies), 3),
+            "min_ms": round(min(latencies), 3),
+            "max_ms": round(max(latencies), 3),
+            "runs": latencies,
         }
 
-    benchmark_cases = [
-        {
-            "id": "latest_tick_lookup",
-            "label": "Latest Tick Lookup",
-            "plain_sql": """
-                SELECT time, symbol, price::float8 AS price, volume
-                FROM market_ticks_plain
-                WHERE symbol = %s
-                ORDER BY time DESC
-                LIMIT 1
-            """,
-            "hypertable_sql": """
-                SELECT time, symbol, price::float8 AS price, volume
-                FROM market_ticks
-                WHERE symbol = %s
-                ORDER BY time DESC
-                LIMIT 1
-            """,
-            "cagg_sql": None,
-            "params": (symbol,),
-        },
-        {
-            "id": "window_scan",
-            "label": "Window Range Scan",
-            "plain_sql": """
-                SELECT time, symbol, price::float8 AS price, volume
-                FROM market_ticks_plain
-                WHERE symbol = %s
-                  AND time >= NOW() - (%s * INTERVAL '1 minute')
-                ORDER BY time DESC
-            """,
-            "hypertable_sql": """
-                SELECT time, symbol, price::float8 AS price, volume
-                FROM market_ticks
-                WHERE symbol = %s
-                  AND time >= NOW() - (%s * INTERVAL '1 minute')
-                ORDER BY time DESC
-            """,
-            "cagg_sql": None,
-            "params": (symbol, window_minutes),
-        },
-        {
-            "id": "ohlcv_1m",
-            "label": "1m OHLC Aggregate",
-            "plain_sql": """
-                SELECT
-                    time_bucket(INTERVAL '1 minute', time) AS bucket,
-                    first(price, time) AS open,
-                    max(price) AS high,
-                    min(price) AS low,
-                    last(price, time) AS close,
-                    sum(volume) AS volume
-                FROM market_ticks_plain
-                WHERE symbol = %s
-                  AND time >= NOW() - (%s * INTERVAL '1 minute')
-                GROUP BY bucket
-                ORDER BY bucket DESC
-            """,
-            "hypertable_sql": """
-                SELECT
-                    time_bucket(INTERVAL '1 minute', time) AS bucket,
-                    first(price, time) AS open,
-                    max(price) AS high,
-                    min(price) AS low,
-                    last(price, time) AS close,
-                    sum(volume) AS volume
-                FROM market_ticks
-                WHERE symbol = %s
-                  AND time >= NOW() - (%s * INTERVAL '1 minute')
-                GROUP BY bucket
-                ORDER BY bucket DESC
-            """,
-            "cagg_sql": """
-                SELECT bucket, open, high, low, close, volume
-                FROM ohlcv_1m
-                WHERE symbol = %s
-                  AND bucket >= NOW() - (%s * INTERVAL '1 minute')
-                ORDER BY bucket DESC
-            """,
-            "params": (symbol, window_minutes),
-        },
-    ]
-
-    case_results: list[dict] = []
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
+            reference_time = await fetch_reference_time(cur, symbol)
+            logger.info("Benchmark reference time for symbol=%s: %s", symbol, reference_time)
+
+            benchmark_cases = [
+                {
+                    "id": "latest_tick_lookup",
+                    "label": "Latest Tick Lookup",
+                    "plain_sql": """
+                        SELECT time, symbol, price::float8 AS price, volume
+                        FROM market_ticks_plain
+                        WHERE symbol = %s
+                        ORDER BY time DESC
+                        LIMIT 1
+                    """,
+                    "hypertable_sql": """
+                        SELECT time, symbol, price::float8 AS price, volume
+                        FROM market_ticks
+                        WHERE symbol = %s
+                        ORDER BY time DESC
+                        LIMIT 1
+                    """,
+                    "cagg_sql": None,
+                    "params": (symbol,),
+                },
+                {
+                    "id": "window_scan",
+                    "label": "Window Range Scan",
+                    "plain_sql": """
+                        SELECT time, symbol, price::float8 AS price, volume
+                        FROM market_ticks_plain
+                        WHERE symbol = %s
+                          AND time >= %s - %s::interval
+                        ORDER BY time DESC
+                    """,
+                    "hypertable_sql": """
+                        SELECT time, symbol, price::float8 AS price, volume
+                        FROM market_ticks
+                        WHERE symbol = %s
+                          AND time >= %s - %s::interval
+                        ORDER BY time DESC
+                    """,
+                    "cagg_sql": None,
+                    "params": (symbol, reference_time, interval),
+                },
+                {
+                    "id": "ohlcv_1m",
+                    "label": "1m OHLC Aggregate",
+                    "plain_sql": """
+                        SELECT
+                            time_bucket(INTERVAL '1 minute', time) AS bucket,
+                            first(price, time) AS open,
+                            max(price) AS high,
+                            min(price) AS low,
+                            last(price, time) AS close,
+                            sum(volume) AS volume
+                        FROM market_ticks_plain
+                        WHERE symbol = %s
+                          AND time >= %s - %s::interval
+                        GROUP BY bucket
+                        ORDER BY bucket DESC
+                    """,
+                    "hypertable_sql": """
+                        SELECT
+                            time_bucket(INTERVAL '1 minute', time) AS bucket,
+                            first(price, time) AS open,
+                            max(price) AS high,
+                            min(price) AS low,
+                            last(price, time) AS close,
+                            sum(volume) AS volume
+                        FROM market_ticks
+                        WHERE symbol = %s
+                          AND time >= %s - %s::interval
+                        GROUP BY bucket
+                        ORDER BY bucket DESC
+                    """,
+                    "cagg_sql": """
+                        SELECT bucket, open, high, low, close, volume
+                        FROM ohlcv_1m
+                        WHERE symbol = %s
+                          AND bucket >= %s - %s::interval
+                        ORDER BY bucket DESC
+                    """,
+                    "params": (symbol, reference_time, interval),
+                },
+            ]
+
+            case_results: list[dict] = []
             for benchmark_case in benchmark_cases:
-                plain_stats = await timed_query(cur, benchmark_case["plain_sql"], benchmark_case["params"])
-                hypertable_stats = await timed_query(cur, benchmark_case["hypertable_sql"], benchmark_case["params"])
+                plain_stats = await query_stats(cur, benchmark_case["plain_sql"], benchmark_case["params"])
+                hypertable_stats = await query_stats(cur, benchmark_case["hypertable_sql"], benchmark_case["params"])
                 cagg_stats = None
                 if benchmark_case["cagg_sql"]:
-                    cagg_stats = await timed_query(cur, benchmark_case["cagg_sql"], benchmark_case["params"])
+                    cagg_stats = await query_stats(cur, benchmark_case["cagg_sql"], benchmark_case["params"])
 
-                hypertable_speedup = None
-                cagg_speedup = None
-                if hypertable_stats["median_ms"] > 0:
-                    hypertable_speedup = round(plain_stats["median_ms"] / hypertable_stats["median_ms"], 2)
-                if cagg_stats and cagg_stats["median_ms"] > 0:
-                    cagg_speedup = round(plain_stats["median_ms"] / cagg_stats["median_ms"], 2)
+                hypertable_speedup = (
+                    round(plain_stats["median_ms"] / hypertable_stats["median_ms"], 2)
+                    if hypertable_stats["median_ms"] > 0
+                    else None
+                )
+                cagg_speedup = (
+                    round(plain_stats["median_ms"] / cagg_stats["median_ms"], 2)
+                    if cagg_stats and cagg_stats["median_ms"] > 0
+                    else None
+                )
 
                 case_results.append(
                     {
@@ -345,7 +410,7 @@ async def benchmark(
 
     return {
         "symbol": symbol,
-        "window_minutes": window_minutes,
+        "window": interval,
         "runs": runs,
         "cases": case_results,
         "summary": {
