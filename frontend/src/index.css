@@ -541,14 +541,30 @@ body {
 	width: 100%;
 	border-collapse: collapse;
 	min-width: 760px;
+	table-layout: fixed;
 }
 
 .benchmark-table th,
 .benchmark-table td {
 	padding: 16px 14px;
-	text-align: left;
 	border-bottom: 1px solid var(--line);
 	font-size: 0.88rem;
+	vertical-align: middle;
+}
+
+.benchmark-table th {
+	text-align: left;
+}
+
+.benchmark-table td {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.benchmark-table td:first-child,
+.benchmark-table th:first-child {
+	text-align: left;
+	white-space: normal;
 }
 
 .benchmark-table th {
