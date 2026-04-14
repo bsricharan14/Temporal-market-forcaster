@@ -277,7 +277,6 @@ async def benchmark(
     async with simulation_manager.maintenance_lock:
         async with pool.connection() as conn:
             async with conn.cursor() as cur:
-                # Avoid benchmark endpoint hanging indefinitely on expensive plans.
                 await cur.execute("SET LOCAL statement_timeout = '10000ms'")
                 reference_time = await fetch_reference_time(cur, normalized_symbol)
                 logger.info("Benchmark reference time for symbol=%s: %s", normalized_symbol, reference_time)
@@ -461,7 +460,6 @@ async def benchmark(
             if best_hypertable_case
             else None,
         },
-        # Legacy fields preserved for compatibility with older UI clients.
         "rows": {
             "plain": legacy_plain_rows,
             "hypertable": legacy_hypertable_rows,

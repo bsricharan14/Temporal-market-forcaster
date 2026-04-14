@@ -83,7 +83,6 @@ async def train_trend_model():
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             try:
-                # pgml requires a strict relation name, we create a view on the fly excluding NULLs and non-numeric columns
                 await cur.execute("CREATE OR REPLACE VIEW pgml_train_trend AS SELECT open::REAL, high::REAL, low::REAL, close::REAL, volume::REAL, current_spread::REAL, target_next_trend_bullish FROM ml_features_hourly WHERE target_next_trend_bullish IS NOT NULL;")
                 ready, message = await _ensure_min_rows(cur, "pgml_train_trend", MIN_TRAINING_ROWS["trend"], "Trend Classifier")
                 if not ready:
@@ -143,7 +142,6 @@ async def train_regime_model():
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             try:
-                # Use engineered regime labels and XGBoost classification for stable predictions.
                 await cur.execute(
                     """
                     CREATE OR REPLACE VIEW pgml_train_regime AS
@@ -263,8 +261,6 @@ async def train_gap_predictor_model():
                 await conn.rollback()
                 logger.error(f"Error training gap model: {e}")
                 return {"status": "error", "message": str(e)}
-
-# Inference Functions
 
 async def safe_predict(query: str, params: tuple):
     await refresh_aggregates()

@@ -109,12 +109,10 @@ class SimulationManager:
         try:
             async with pool.connection() as conn:
                 async with conn.cursor() as cur:
-                    # Clear materialized views first (they depend on the tables)
                     logger.info("Clearing OHLCV materialized views...")
                     await cur.execute("TRUNCATE TABLE ohlcv_1m CASCADE")
                     await cur.execute("TRUNCATE TABLE ohlcv_1h CASCADE")
                     await cur.execute("TRUNCATE TABLE ohlcv_1d CASCADE")
-                    # Clear the main tables
                     logger.info("Clearing market tick tables...")
                     await cur.execute("TRUNCATE TABLE market_ticks CASCADE")
                     await cur.execute("TRUNCATE TABLE market_ticks_plain CASCADE")
@@ -284,7 +282,6 @@ class SimulationManager:
                 logger.info("Restarting simulation - clearing all data...")
                 await self._clear_all_tick_data()
                 logger.info("Data cleared, reloading simulation state...")
-                # Small delay to ensure database operations complete
                 await asyncio.sleep(0.2)
 
         snapshots: list[dict[str, Any]] = []
@@ -418,8 +415,6 @@ class SimulationManager:
                         current_tick = state.source_ticks[state.index]
                         state.last_price = current_tick["price"]
 
-                        # Replay with deterministic wall-clock progression:
-                        # at 1x, emitted tick time increases by exactly 1 second.
                         if state.replay_time is None:
                             state.replay_time = current_tick["time"]
                         else:
@@ -444,8 +439,6 @@ class SimulationManager:
                             "total_ticks": len(state.source_ticks),
                         }
 
-                        # Deterministic playback speed:
-                        # 1x => 1 second per tick, 2x => 0.5s, 0.5x => 2s.
                         target_interval = max(0.001, 1.0 / max(0.1, state.speed_multiplier))
                         
                         state.index += 1

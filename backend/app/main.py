@@ -10,7 +10,6 @@ from app.api.websockets.stream import router as stream_router
 from app.db.connection import close_pool
 from app.services.simulation import simulation_manager
 
-# Psycopg async connections on Windows require selector event loop policy.
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 

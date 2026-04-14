@@ -113,7 +113,6 @@ export default function ChartsPage({
     setLocalSpeed(speedMultiplier);
   }, [speedMultiplier]);
 
-  // Reset chart offset when symbol changes
   useEffect(() => {
     setChartOffset(0);
   }, [symbol]);
@@ -123,11 +122,9 @@ export default function ChartsPage({
     [candles1m, timeframe],
   );
 
-  // Keep max 50 candles visible, auto-scroll to show latest candles
   const MAX_VISIBLE_CANDLES = 50;
   
   useEffect(() => {
-    // Auto-scroll to keep showing the latest candles
     if (allChartCandles.length > MAX_VISIBLE_CANDLES) {
       setChartOffset(Math.max(0, allChartCandles.length - MAX_VISIBLE_CANDLES));
     } else {
@@ -158,7 +155,6 @@ export default function ChartsPage({
     });
   }, [allChartCandles.length]);
 
-  // Keyboard shortcuts for chart scrolling
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (allChartCandles.length === 0) return;

@@ -125,7 +125,6 @@ export default function Dashboard({
   const MAX_VISIBLE_CANDLES = 50;
   
   useEffect(() => {
-    // Auto-scroll to keep showing the latest candles
     if (allChartCandles.length > MAX_VISIBLE_CANDLES) {
       setChartOffset(Math.max(0, allChartCandles.length - MAX_VISIBLE_CANDLES));
     } else {

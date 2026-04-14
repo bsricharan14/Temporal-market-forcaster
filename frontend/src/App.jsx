@@ -151,7 +151,6 @@ export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState(ASSETS[0].symbol);
   const [availableSymbols, setAvailableSymbols] = useState([]);
   
-  // Market Simulation States
   const [candles1mBySymbol, setCandles1mBySymbol] = useState({});
   const [livePriceBySymbol, setLivePriceBySymbol] = useState({});
   const [statusBySymbol, setStatusBySymbol] = useState({});
@@ -169,7 +168,6 @@ export default function App() {
     isInitializingRef.current = isInitializing;
   }, [isInitializing]);
 
-  // Symbol Management
   const selectableAssets = useMemo(() => {
     if (!availableSymbols.length) return ASSETS;
     const filtered = ASSETS.filter((asset) => availableSymbols.includes(asset.symbol));
@@ -197,14 +195,12 @@ export default function App() {
         if (!active) return;
         setAvailableSymbols(Array.isArray(payload.symbols) ? payload.symbols : []);
       } catch {
-        // Keep fallback asset list
       }
     };
     loadSymbols();
     return () => { active = false; };
   }, []);
 
-  // Initial Fetch of Ticks and Status
   useEffect(() => {
     if (!availableSymbols.length) return;
     const controller = new AbortController();
@@ -231,7 +227,6 @@ export default function App() {
             const fetchedOhlcv = await ohlcvResponse.json();
             const status = await statusResponse.json();
             
-            // The latest 1m close price is an acceptable initial livePrice
             const parsedOhlcv = Array.isArray(fetchedOhlcv) ? fetchedOhlcv : [];
             const initialLivePrice = parsedOhlcv.length > 0 ? parsedOhlcv[parsedOhlcv.length - 1].close : null;
 
@@ -285,7 +280,6 @@ export default function App() {
     };
   }, [availableSymbols]);
 
-  // Detect restart (all candles cleared) and ensure isInitializing is false
   useEffect(() => {
     const allCandlesEmpty = Object.values(candles1mBySymbol).every(candles => !candles || candles.length === 0);
     if (allCandlesEmpty && Object.keys(candles1mBySymbol).length > 0 && isInitializing) {
@@ -293,7 +287,6 @@ export default function App() {
     }
   }, [candles1mBySymbol, isInitializing]);
 
-  // WebSocket Connection
   useEffect(() => {
     let active = true;
     let reconnectTimeout = null;
@@ -322,11 +315,8 @@ export default function App() {
             const tickSymbol = message.tick.symbol;
             if (!tickSymbol) return;
 
-            // Skip ticks only during initial data load
-            // Allow ticks to process after initial load and after restart
             if (isInitializingRef.current) return;
 
-            // Track last tick timestamp per symbol and keep it monotonic.
             setLastTickTimeBySymbol((previous) => {
               const nextIso = message.tick.time;
               const previousIso = previous[tickSymbol];
@@ -362,7 +352,6 @@ export default function App() {
               const next = [...previousCandles];
 
               if (next.length === 0) {
-                 // Allow creating first candle (this happens during fresh restart)
                  next.push({
                    bucket: currentBucketIso,
                    open: price,
@@ -449,9 +438,7 @@ export default function App() {
     };
   }, []);
 
-  // Update Simulation Speed
   const updateSimulationSpeed = async (nextSpeed) => {
-    // Optimistic update
     setSpeedBySymbol((prev) => {
        const next = {...prev};
        for (const sym of availableSymbols) {
@@ -501,7 +488,6 @@ export default function App() {
     setGlobalSimulationError("");
 
     try {
-      // On restart/clear, clear all frontend data immediately.
       if (action === "restart" || action === "clear") {
         setIsInitializing(true);
         setCandles1mBySymbol({});
@@ -509,7 +495,6 @@ export default function App() {
         setStatusBySymbol({});
         setSpeedBySymbol({});
         setLastTickTimeBySymbol({});
-        // Small delay to ensure state updates
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
@@ -530,7 +515,6 @@ export default function App() {
         });
       }
 
-      // After restart, resync full dataset from API so charts are always consistent.
       if (action === "restart") {
         const symbolsToRefresh = availableSymbols.length
           ? availableSymbols
@@ -597,7 +581,6 @@ export default function App() {
     }
   };
 
-  // Predictions
   const [predictions, setPredictions] = useState(() => getFallbackPredictions(selectedAsset.symbol));
 
   useEffect(() => {
@@ -611,7 +594,6 @@ export default function App() {
           setPredictions(data.predictions);
         }
       } catch (err) {
-        // preserve fallback if offline
       }
     };
     
@@ -623,7 +605,6 @@ export default function App() {
     };
   }, [selectedAsset.symbol]);
 
-  // Derived Values
   const candles1m = candles1mBySymbol[selectedAsset.symbol] ?? [];
   const livePrice = livePriceBySymbol[selectedAsset.symbol] ?? selectedAsset.basePrice;
   const simulationStatus = statusBySymbol[selectedAsset.symbol] ?? "loading";
